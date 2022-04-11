@@ -1,7 +1,6 @@
 #! python3
 import argparse
 import fnmatch
-import itertools
 import multiprocessing
 import os
 import platform
@@ -14,9 +13,8 @@ import time
 import urllib.request
 from dataclasses import dataclass, field
 from enum import Enum
-from functools import partial
 from pathlib import Path
-from typing import List, Tuple, Optional, Union, Dict, Iterable, Any
+from typing import List, Tuple, Optional, Union, Dict, Iterable, Any, Callable
 
 BASE_PATH = Path(__file__).parent
 JDKS_PATH = BASE_PATH / "jdks"
@@ -411,11 +409,16 @@ class IteratedResults:
                f"with config {self.config}\n\n" + "\n".join(lines)
 
     def write(self, path: Path):
-        path.write_text(str(self))
+        path.write_text(str(self) + "\n")
 
 
-def Profiler_run(self: "Profiler", config: ProfilerConfig, jdk: JDKBuild, benchmark: Benchmark, result_base_folder: Path):
-    return self.run(config, jdk, benchmark, result_base_folder)
+def Profiler_run(self: "Profiler", config: ProfilerConfig, jdk: JDKBuild, benchmark: Benchmark,
+                 result_base_folder: Path):
+    return jdk, benchmark, self.run(config, jdk, benchmark, result_base_folder)
+
+
+def Profiler_run2(args):
+    return Profiler_run(*args)
 
 
 class Profiler:
@@ -427,13 +430,16 @@ class Profiler:
                          result_base_folder: Path, max_iterations: int):
         os.makedirs(result_base_folder, exist_ok=True)
         results_file = result_base_folder / "results.csv"
+        results: IteratedResults = IteratedResults(self, config, jdks, benchmarks)
         try:
-            results: IteratedResults = IteratedResults(self, config, jdks, benchmarks)
-            for jdk, benchmark, result in self.run_all(config, jdks, benchmarks, result_base_folder, max_iterations):
+            def handler(jdk, benchmark, result):
                 results.add(jdk, benchmark, result)
                 if result.hs_err:
                     print(results)
                     results.write(results_file)
+
+            self.run_all(config, jdks, benchmarks, result_base_folder, max_iterations, handler)
+
         finally:
             print()
             print(results)
@@ -441,24 +447,30 @@ class Profiler:
             results.write(results_file)
 
     def run_all(self, config: ProfilerConfig, jdks: List[JDKBuild], benchmarks: List[Benchmark],
-                result_base_folder: Path, max_count: int) -> Iterable[Tuple[JDKBuild, Benchmark, Result]]:
+                result_base_folder: Path, max_count: int,
+                handler: Callable[[JDKBuild, Benchmark, Result], None]):
         if config.parallelism == 1:
             for i in range(max_count):
                 for jdk in jdks:
                     for benchmark in benchmarks:
-                        yield jdk, benchmark, self.run(config, jdk, benchmark, result_base_folder)
+                        handler(jdk, benchmark, self.run(config, jdk, benchmark, result_base_folder))
         else:
             with multiprocessing.Pool(processes=config.parallelism) as pool:
-                return pool.starmap(Profiler_run,
-                                    ((self, config, jdk, benchmark, result_base_folder) for jdk in jdks for benchmark in benchmarks))
+                for jdk, benchmark, result in pool.imap_unordered(Profiler_run2,
+                                                                  [(self, config, jdk, benchmark, result_base_folder)
+                                                                   for i in range(max_count)
+                                                                   for jdk in jdks
+                                                                   for benchmark in benchmarks],
+                                                                  chunksize=1):
+                    handler(jdk, benchmark, result)
 
     def run(self, config: ProfilerConfig, jdk: JDKBuild, benchmark: Benchmark,
             result_base_folder: Path) -> Result:
         base_folder = result_base_folder / str(jdk) / benchmark.name
         os.makedirs(base_folder, exist_ok=True)
-        count = len(list(base_folder.iterdir()))
+        count = len(list(base_folder.iterdir())) if config.parallelism == 1 else time.time_ns()
         folder = base_folder / str(count)
-        os.makedirs(folder)
+        os.makedirs(folder, exist_ok=True)
         res = self._run(config, jdk.java_path(),
                         benchmark.java_arguments(int(config.program_timeout)), folder, benchmark)
         return res
