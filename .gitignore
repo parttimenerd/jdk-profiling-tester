@@ -1,0 +1,8 @@
+tempfile
+results
+scratch
+benchmarks
+venv
+*.jfr
+.idea
+.DS_Store

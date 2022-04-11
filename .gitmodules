@@ -1,0 +1,17 @@
+[submodule "jdks/openjdk"]
+	path = jdks/openjdk
+	url = git@github.com:openjdk/jdk
+[submodule "jdks/asgct2"]
+	path = jdks/asgct2
+	url = git@github.com:parttimenerd/jdk
+	branch = parttimenerd_asgct2
+[submodule "jdks/openjdk18u"]
+	path = jdks/openjdk18u
+	url = git@github.com:openjdk/jdk18u.git
+[submodule "profilers/asgct2-async-profiler"]
+	path = profilers/asgct2-async-profiler
+	url = https://github.com/SAP/async-profiler
+	branch = parttimenerd_asgct2
+[submodule "profilers/async-profiler"]
+	path = profilers/async-profiler
+	url = https://github.com/jvm-profiling-tools/async-profiler
