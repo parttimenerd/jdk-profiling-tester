@@ -11,6 +11,7 @@ import subprocess
 import sys
 import time
 import urllib.request
+import warnings
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
@@ -583,10 +584,19 @@ def profile(config: ProfilerConfig, profilers: List[Profiler],
             jdks: List[JDKBuild], benchmarks: List[Benchmark],
             result_base_folder: Path, max_iterations: int):
     try:
+        if not len(profilers):
+            warnings.warn("no profilers given")
+            return
+        if not len(jdks):
+            warnings.warn("no jdks given")
+            return
         for profiler in profilers:
             profiler.build()
+            comp_jdks = [jdk for jdk in jdks if profiler.compatible(jdk)]
+            if not len(comp_jdks):
+                warnings.warn(f"no jdks given that are compatible to the profiler {profiler}")
             profiler.run_all_iterated(config,
-                                      [jdk for jdk in jdks if profiler.compatible(jdk)],
+                                      comp_jdks,
                                       benchmarks, result_base_folder / profiler.name,
                                       max_iterations)
     except KeyboardInterrupt as tex:
