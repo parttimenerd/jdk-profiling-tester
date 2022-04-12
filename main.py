@@ -500,7 +500,7 @@ class Profiler:
                 return Result(None)
             (folder / "cmd.sh").write_text(f"""
 # with timeout of {config.interval()}us run 
-{" ".join(cmd)}
+{" ".join(map(str, cmd))}
 """)
             print(f"hs_err file: {hs_err}")
             print("------")
