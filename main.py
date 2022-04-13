@@ -219,12 +219,13 @@ class IncludedJDKBuild(JDKBuild):
 @dataclass(frozen=True)
 class CustomJDKBuild(JDKBuild):
     path: Path
+    """ path to jdk folder """
 
     def __str__(self) -> str:
         return str(self.path)
 
     def bin_path(self) -> Path:
-        return self.path / "images" / "jdk" / "bin"
+        return self.path / "bin"
 
     def supports_asgct2(self) -> bool:
         return True
@@ -255,7 +256,14 @@ def build(jdk_build_name: str):
 
 def get_jdk_build(name: str) -> JDKBuild:
     if "/" in name:
-        return CustomJDKBuild(Path(name).absolute())
+        path = Path(name)
+        if (p := (path / "images" / "jdk")).exists():
+            path = p
+        elif (p := (path / "jdk")).exists():
+            path = p
+        else:
+            assert path.name == "jdk"
+        return CustomJDKBuild(path.absolute())
     jdk, bt = parse_jdk_build_name(name)
     return jdk.get(bt)
 

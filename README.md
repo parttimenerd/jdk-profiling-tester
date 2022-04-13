@@ -42,7 +42,7 @@ Supported JDKS
 - `openjdk`: OpenJDK master
 - `openjdk18u`: JDK 18
 - `asgct2`: detached OpenJDK master with AsyncGetCallTrace2 support and unified stack walking for profiling
-- your own JDK, just pass the path to the `images` folder
+- your own JDK, just pass the path to the `images` or `jdk` folder
 
 Benchmarks
 ----------
