@@ -1,11 +1,11 @@
 JDK Profiling Tester
 =========================
 
-A tool to test the stability of JFR and AsyncGetCallTrace(2) by using them
+A tool to test the stability of JFR and AsyncGetStackTrace/AsyncGetCallTrace by using them
 to profile a set of benchmarks with small capturing intervals.
 It tests AsyncGetCallTrace and the proposed AsyncGetCallTrace2 
-([JEP draft](https://bugs.openjdk.java.net/browse/JDK-8284289), 
-[demo](https://github.com/parttimenerd/asgct2-demo/)) using AsyncProfiler.
+([JEP draft](https://openjdk.org/jeps/8284289),
+[demo](https://github.com/parttimenerd/asgst-demo/)) using AsyncProfiler.
 
 The "aim" is to find sporadic JVM crashes that result in `hs_err` files.
 
@@ -30,10 +30,10 @@ subcommands:
     profile             profile benchmarks with jdks and profilers
 ```
 
-For example test AsyncGetCallTrace with the asgct2 prototype version via
+For example test AsyncGetCallTrace with the asgst prototype version via
 
 ```sh
-./main.py profile asgct asgct2-server-fastdebug
+./main.py profile asgct asgst-server-fastdebug
 ```
 
 Supported JDKS
@@ -41,7 +41,7 @@ Supported JDKS
 
 - `openjdk`: OpenJDK master
 - `openjdk18u`: JDK 18
-- `asgct2`: detached OpenJDK master with AsyncGetCallTrace2 support and unified stack walking for profiling
+- `asgst`: detached OpenJDK master with AsyncGetStackTrace support
 - your own JDK, just pass the path to the `images` or `jdk` folder
 
 Benchmarks

@@ -194,7 +194,7 @@ class JDKBuild:
     def __str__(self):
         raise NotImplementedError()
 
-    def supports_asgct2(self) -> bool:
+    def supports_asgst(self) -> bool:
         raise NotImplementedError()
 
     def java_path(self) -> Path:
@@ -212,8 +212,8 @@ class IncludedJDKBuild(JDKBuild):
     def bin_path(self) -> Path:
         return self.jdk.build_folder(self.type) / "images" / "jdk" / "bin"
 
-    def supports_asgct2(self) -> bool:
-        return "asgct2" in self.jdk.name
+    def supports_asgst(self) -> bool:
+        return "asgst" in self.jdk.name
 
 
 @dataclass(frozen=True)
@@ -227,7 +227,7 @@ class CustomJDKBuild(JDKBuild):
     def bin_path(self) -> Path:
         return self.path / "bin"
 
-    def supports_asgct2(self) -> bool:
+    def supports_asgst(self) -> bool:
         return True
 
 
@@ -522,11 +522,11 @@ class Profiler:
     def _java_arguments(self, config: ProfilerConfig) -> List[str]:
         raise NotImplementedError()
 
-    def uses_asgct2(self) -> bool:
+    def uses_asgst(self) -> bool:
         return False
 
     def compatible(self, jdk: JDKBuild) -> bool:
-        return jdk.supports_asgct2() or not self.uses_asgct2()
+        return jdk.supports_asgst() or not self.uses_asgst()
 
     @staticmethod
     def _env(jdk_folder: Path) -> Dict[str, str]:
@@ -544,9 +544,9 @@ class Profiler:
 
 class AsyncProfiler(Profiler):
 
-    def __init__(self, name: str, base_path: Path, asgct2: bool):
+    def __init__(self, name: str, base_path: Path, asgst: bool):
         super(AsyncProfiler, self).__init__(name)
-        self.asgct2 = asgct2
+        self.asgst = asgst
         self.base_path = base_path
 
     def _java_arguments(self, config: ProfilerConfig) -> List[str]:
@@ -554,8 +554,8 @@ class AsyncProfiler(Profiler):
             f"-agentpath:{self.base_path}/build/libasyncProfiler.so=start,flat=10000,interval={config.interval()}us,"
             f"traces=1,event=cpu"]
 
-    def uses_asgct2(self) -> bool:
-        return self.asgct2
+    def uses_asgst(self) -> bool:
+        return self.asgst
 
     def build(self):
         subprocess.check_call(["make"], cwd=self.base_path, stdout=subprocess.DEVNULL)
@@ -570,7 +570,7 @@ class JFR(Profiler):
         return [f"-XX:StartFlightRecording=filename=flight.jfr,"
                 f"jdk.ExecutionSample#period={max(1, round(config.interval() / 1000))}ms"]
 
-    def uses_asgct2(self) -> bool:
+    def uses_asgst(self) -> bool:
         return False
 
     def cleanup_and_check(self, folder: Path):
@@ -580,8 +580,8 @@ class JFR(Profiler):
 
 
 PROFILERS = [JFR(),
-             AsyncProfiler("asgct2", BASE_PATH / "profilers" / "asgct2-async-profiler", asgct2=True),
-             AsyncProfiler("asgct", BASE_PATH / "profilers" / "async-profiler", asgct2=False)]
+             AsyncProfiler("asgst", BASE_PATH / "profilers" / "asgst-async-profiler", asgst=True),
+             AsyncProfiler("asgct", BASE_PATH / "profilers" / "async-profiler", asgst=False)]
 
 
 def get_profilers(pattern: str) -> List[Profiler]:
