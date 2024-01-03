@@ -350,6 +350,7 @@ class ProfilerConfig:
     timeout: float
     program_timeout: float
     parallelism: int = 1
+    jvm_args: List[str] = field(default_factory=list)
 
     def interval(self) -> float:
         """ returns the interval in usecs """
@@ -553,13 +554,17 @@ class Profiler:
         cmd = [java_binary, *self._java_arguments(config),
                f"-XX:ErrorFile=hs_err.log",
                "-XX:+UnlockDiagnosticVMOptions", "-XX:+DebugNonSafepoints",
-               *bench_args]
+               *config.jvm_args, *bench_args]
         try:
             print(" ".join(str(c).replace(str(BASE_PATH), ".") for c in cmd))
             try:
                 out = subprocess.check_output(cmd, env=env, cwd=folder,
                                               stderr=subprocess.PIPE,
                                               timeout=config.timeout).decode()
+                if "failed: Permission denied" in out:
+                    print(
+                        "No access to perf events, try running 'sysctl kernel.perf_event_paranoid=1'")
+                    exit(1)
             except subprocess.TimeoutExpired as tex:
                 print(tex)
             finally:
@@ -741,7 +746,7 @@ def cli():
     def handle_profile(args):
         profile(
             ProfilerConfig(args.interval, args.timeout, args.program_timeout,
-                           args.parallelism),
+                           args.parallelism, args.misc_jvm_args.split(" ")),
             get_profilers(args.profiler_pattern),
             get_jdk_builds(args.jdk_pattern),
             get_benchmarks(args.benchmarks),
@@ -771,11 +776,14 @@ def cli():
     profile_parser.add_argument("--iterations", "-c",
                                 help="number of iterations per profiler",
                                 type=int)
+    profile_parser.add_argument("--misc_jvm_args",
+                                help="miscellaneous jvm arguments", type=str)
     profile_parser.set_defaults(profiler_pattern="*", jdk_pattern="*",
                                 benchmarks="*",
                                 interval="10us", timeout=200,
                                 program_timeout=30, parallelism=1,
-                                iterations=10, func=handle_profile)
+                                iterations=10, func=handle_profile,
+                                misc_jvm_args="")
 
     args = parser.parse_args(
         sys.argv[1:] if sys.argv[0].endswith(".py") else sys.argv)
