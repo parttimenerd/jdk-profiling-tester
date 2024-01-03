@@ -10,3 +10,7 @@
 [submodule "profilers/async-profiler-2.9"]
 	path = profilers/async-profiler-2.9
 	url = git@github.com:async-profiler/async-profiler.git
+[submodule "jdks/openjdk_jfr_patched"]
+	path = jdks/openjdk_jfr_patched
+	url = git@github.com:parttimenerd/jdk
+	branch = parttimenerd_ns_jfr_interval

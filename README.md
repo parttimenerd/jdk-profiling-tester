@@ -44,7 +44,7 @@ For example test async-profiler 2.9:
 Or test JFR:
 
 ```sh
-./main.py profile jfr openjdk-server-fastdebug
+./main.py profile jfr openjdk_jfr_patched-server-fastdebug
 ```
 
 Or test the current async-profiler master:
@@ -61,6 +61,11 @@ Supported JDKS
 
 - `openjdk`: OpenJDK master
 - `openjdk21u`: JDK 21
+- `openjdk_jfr_patched`: patched OpenJDK master that
+   - doesn't store any ExecutionSample events
+   - supports sub-millisecond intervals, interpreting ms intervals as ns
+   - patch: https://github.com/openjdk/jdk/commit/ed46fae0904bdfeb345ee45e044886bf32a3d8b7.patch
+   - allows you to stress test JFR properly
 - your own JDK, just pass the path to the `images` or `jdk` folder
 
 Benchmarks
