@@ -120,7 +120,8 @@ download(
 
 BENCHMARKS: List[Benchmark] = [
                                   Benchmark.for_jar(DACAPO_JAR_PATH, [x],
-                                                    cleanup_files=["scratch"])
+                                                    cleanup_files=["scratch"],
+                                                    name=f"dacapo {x}")
                                   for x in
                                   ["avrora", "batik", "eclipse", "fop",
                                    "graphchi", "h2", "jme", "jython",
@@ -746,7 +747,7 @@ def cli():
     def handle_profile(args):
         profile(
             ProfilerConfig(args.interval, args.timeout, args.program_timeout,
-                           args.parallelism, args.misc_jvm_args.split(" ")),
+                           args.parallelism, args.misc_jvm_args.split(" ") if args.misc_jvm_args else []),
             get_profilers(args.profiler_pattern),
             get_jdk_builds(args.jdk_pattern),
             get_benchmarks(args.benchmarks),
