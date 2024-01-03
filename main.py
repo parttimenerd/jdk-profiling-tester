@@ -520,18 +520,20 @@ class Profiler:
             with multiprocessing.Pool(processes=config.parallelism) as pool:
                 for jdk, benchmark, result in pool.imap_unordered(Profiler_run2,
                                                                   [(
-                                                                   self, config,
-                                                                   jdk,
-                                                                   benchmark,
-                                                                   result_base_folder)
-                                                                   for i in
-                                                                   range(
-                                                                       max_count)
-                                                                   for jdk in
-                                                                   jdks
-                                                                   for benchmark
-                                                                   in
-                                                                   benchmarks],
+                                                                          self,
+                                                                          config,
+                                                                          jdk,
+                                                                          benchmark,
+                                                                          result_base_folder)
+                                                                      for i in
+                                                                      range(
+                                                                          max_count)
+                                                                      for jdk in
+                                                                      jdks
+                                                                      for
+                                                                      benchmark
+                                                                      in
+                                                                      benchmarks],
                                                                   chunksize=1):
                     handler(jdk, benchmark, result)
 
@@ -613,9 +615,10 @@ class Profiler:
 
 class AsyncProfiler(Profiler):
 
-    def __init__(self, name: str, base_path: Path):
+    def __init__(self, name: str, base_path: Path, enable_unsafe: bool = True):
         super(AsyncProfiler, self).__init__(name)
         self.base_path = base_path
+        self.enable_unsafe = enable_unsafe
 
     def build(self):
         subprocess.check_call(["make", "clean"], cwd=self.base_path,
@@ -630,20 +633,20 @@ class AsyncProfiler(Profiler):
     def _java_arguments(self, config: ProfilerConfig) -> List[str]:
         return [
             f"-agentpath:{self._find_lib()}=start,flat=10000,interval={config.interval()}us,"
-            f"traces=1,event=cpu"]
+            f"traces=1,event=cpu,safe={-1 if self.enable_unsafe else 0}"]
 
 
 class AsyncProfilerNew(AsyncProfiler):
 
-    def __init__(self, name: str, base_path: Path):
-        super().__init__(name, base_path)
+    def __init__(self, name: str, base_path: Path, enable_unsafe: bool = True):
+        super().__init__(name, base_path, enable_unsafe)
 
 
 class AsyncProfilerOld(AsyncProfiler):
     """ before 2.10 """
 
-    def __init__(self, name: str, base_path: Path):
-        super().__init__(name, base_path)
+    def __init__(self, name: str, base_path: Path, enable_unsafe: bool = True):
+        super().__init__(name, base_path, enable_unsafe)
 
     def build(self):
         subprocess.check_call(["git", "checkout", "-f", "v2.9"],
@@ -669,10 +672,12 @@ class JFR(Profiler):
 
 
 PROFILERS = [JFR(),
-             AsyncProfilerNew("asgct",
-                              BASE_PATH / "profilers" / "async-profiler"),
-             AsyncProfilerOld("asgct-2.9",
-                              BASE_PATH / "profilers" / "async-profiler-2.9")]
+             *[AsyncProfilerNew("asgct" if us else "asgct-safe",
+                                BASE_PATH / "profilers" / "async-profiler",
+                                enable_unsafe=us) for us in [True, False]],
+             *[AsyncProfilerOld("asgct-2.9" if us else "asgct-safe-2.9",
+                                BASE_PATH / "profilers" / "async-profiler-2.9")
+               for us in [True, False]]]
 
 
 def get_profilers(pattern: str) -> List[Profiler]:
@@ -747,7 +752,8 @@ def cli():
     def handle_profile(args):
         profile(
             ProfilerConfig(args.interval, args.timeout, args.program_timeout,
-                           args.parallelism, args.misc_jvm_args.split(" ") if args.misc_jvm_args else []),
+                           args.parallelism, args.misc_jvm_args.split(
+                    " ") if args.misc_jvm_args else []),
             get_profilers(args.profiler_pattern),
             get_jdk_builds(args.jdk_pattern),
             get_benchmarks(args.benchmarks),
