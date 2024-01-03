@@ -1,17 +1,12 @@
 [submodule "jdks/openjdk"]
 	path = jdks/openjdk
 	url = https://github.com/openjdk/jdk
-[submodule "jdks/asgst"]
-	path = jdks/asgst
-	url = https://github.com/parttimenerd/jdk
-	branch = parttimenerd_asgst
-[submodule "profilers/asgst-async-profiler"]
-	path = profilers/asgst-async-profiler
-	url = https://github.com/parttimenerd/async-profiler
-	branch = parttimenerd_asgst
 [submodule "profilers/async-profiler"]
 	path = profilers/async-profiler
-	url = https://github.com/jvm-profiling-tools/async-profiler
-[submodule "jdks/openjdk19u"]
-	path = jdks/openjdk19u
-	url = https://github.com/openjdk/jdk19u
+	url = https://github.com/async-profiler/async-profiler
+[submodule "jdks/jdk21u"]
+	path = jdks/jdk21u
+	url = git@github.com:openjdk/jdk21u.git
+[submodule "profilers/async-profiler-2.9"]
+	path = profilers/async-profiler-2.9
+	url = git@github.com:async-profiler/async-profiler.git

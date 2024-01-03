@@ -1,13 +1,18 @@
 JDK Profiling Tester
 =========================
 
-A tool to test the stability of JFR and AsyncGetStackTrace/AsyncGetCallTrace by using them
+A tool to test the stability of JFR and AsyncGetCallTrace by using them
 to profile a set of benchmarks with small capturing intervals.
-It tests AsyncGetCallTrace and the proposed AsyncGetCallTrace2 
-([JEP draft](https://openjdk.org/jeps/8284289),
-[demo](https://github.com/parttimenerd/asgst-demo/)) using AsyncProfiler.
+It tests AsyncGetCallTrace using AsyncProfiler.
 
 The "aim" is to find sporadic JVM crashes that result in `hs_err` files.
+
+Setup
+-----
+
+```sh
+git clone https://github.com/parttimenerd/jdk-profiling-tester.git --recursive
+```
 
 Usage
 -----
@@ -30,20 +35,32 @@ subcommands:
     profile             profile benchmarks with jdks and profilers
 ```
 
-For example test AsyncGetStackTrace with the AsyncGetStackTrace prototype version via
+For example test async-profiler 2.9:
 
 ```sh
-./main.py profile asgst asgst-server-fastdebug
+./main.py profile asgct-2.9 openjdk-server-fastdebug
 ```
 
-this builds async-profiler and the JDK if needed.
+Or test JFR:
+
+```sh
+./main.py profile jfr openjdk-server-fastdebug
+```
+
+Or test the current async-profiler master:
+
+```sh
+./main.py profile asgct-2.9 openjdk-server-fastdebug
+```
+
+The JDK and profiler are built if needed. Use the `./main.py build`
+to rebuild specific jdks.
 
 Supported JDKS
 --------------
 
 - `openjdk`: OpenJDK master
-- `openjdk19u`: JDK 19
-- `asgst`: detached OpenJDK master with AsyncGetStackTrace support
+- `openjdk21u`: JDK 21
 - your own JDK, just pass the path to the `images` or `jdk` folder
 
 Benchmarks
@@ -62,7 +79,7 @@ usage: main.py profile [-h] [--benchmarks BENCHMARKS] [--interval INTERVAL] [--t
                        profiler_pattern jdk_pattern
 
 positional arguments:
-  profiler_pattern      profilers: jfr, asgst, asgct
+  profiler_pattern      profilers: jfr, asgct
   jdk_pattern           glob style patterns for jdks, supports commas
 
 options:

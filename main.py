@@ -20,6 +20,11 @@ from typing import List, Tuple, Optional, Union, Dict, Iterable, Any, Callable
 BASE_PATH = Path(__file__).parent
 JDKS_PATH = BASE_PATH / "jdks"
 BENCH_PATH = BASE_PATH / "benchmarks"
+DACAPO_PATH = BENCH_PATH / "dacapo"
+DACAPO_VERSION = "dacapo-23.11-chopin"
+DACAPO_JAR_PATH = DACAPO_PATH / f"{DACAPO_VERSION}.jar"
+RENAISSANCE_VERSION = "0.15.0"
+RENAISSANCE_JAR_PATH = BENCH_PATH / f"renaissance-{RENAISSANCE_VERSION}.jar"
 
 
 def pad_left(s: str, count: int) -> str:
@@ -49,10 +54,13 @@ class Benchmark:
         return Benchmark(klass, klass, classpath)
 
     @staticmethod
-    def for_jar(jar: Path, arguments: List[str], name: str = None, cleanup_files: List[str] = None) -> "Benchmark":
+    def for_jar(jar: Path, arguments: List[str], name: str = None,
+                cleanup_files: List[str] = None) -> "Benchmark":
         assert jar.exists()
-        return Benchmark(name or f"{' '.join(jar.name.split('.')[:-1])} {' '.join(arguments)}", jar,
-                         arguments=arguments, cleanup_files=cleanup_files)
+        return Benchmark(
+            name or f"{' '.join(jar.name.split('.')[:-1])} {' '.join(arguments)}",
+            jar,
+            arguments=arguments, cleanup_files=cleanup_files)
 
     def java_arguments(self, run_seconds: int = 100000000) -> List[str]:
         args: List[str] = []
@@ -62,7 +70,8 @@ class Benchmark:
             args.extend(["-jar", str(self.file)])
         else:
             args.append(self.file)
-        args.extend(arg.replace("$RUN_SECONDS", str(run_seconds)) for arg in self.arguments)
+        args.extend(arg.replace("$RUN_SECONDS", str(run_seconds)) for arg in
+                    self.arguments)
         return args
 
     def __str__(self) -> str:
@@ -77,34 +86,64 @@ class Benchmark:
                 shutil.rmtree(p)
 
 
-def download(url, target_filename):
+def download(url: str, target_filename: str, kind: str) -> bool:
     os.makedirs(BENCH_PATH, exist_ok=True)
     target_path = BENCH_PATH / target_filename
     if not target_path.exists():
+        for f in BENCH_PATH.glob(f"{kind}*"):
+            if f.is_dir():
+                shutil.rmtree(f, ignore_errors=False)
+            else:
+                f.unlink()
         print(f"Downloading {target_filename} from {url}")
-        urllib.request.urlretrieve(url, BENCH_PATH / target_filename)
+        subprocess.check_call(["curl", "-L", url, "-o", target_path],
+                              stdout=subprocess.DEVNULL)
+        return True
+    return False
 
 
-download("https://github.com/renaissance-benchmarks/renaissance/releases/download/v0.14.0/renaissance-gpl-0.14.0.jar",
-         "renaissance.jar")
-download("https://downloads.sourceforge.net/project/dacapobench/9.12-bach-MR1/dacapo-9.12-MR1-bach.jar",
-         "dacapo.jar")
+def download_dacapo():
+    changed = download(
+        f"https://download.dacapobench.org/chopin/{DACAPO_VERSION}.zip",
+        f"{DACAPO_VERSION}.zip", "dacapo")
+    zip_file = BENCH_PATH / f"{DACAPO_VERSION}.zip"
+    # unzip zip file into DACAPO_PATH
+    if changed:
+        print(f"Unzipping {zip_file} to {DACAPO_PATH}")
+        shutil.unpack_archive(zip_file, DACAPO_PATH)
+
+
+download_dacapo()
+download(
+    f"https://github.com/renaissance-benchmarks/renaissance/releases/download/v{RENAISSANCE_VERSION}/renaissance-gpl-{RENAISSANCE_VERSION}.jar",
+    RENAISSANCE_JAR_PATH, "renaissance")
 
 BENCHMARKS: List[Benchmark] = [
-                                  Benchmark.for_jar(BENCH_PATH / "dacapo.jar", [x], cleanup_files=["scratch"])
+                                  Benchmark.for_jar(DACAPO_JAR_PATH, [x],
+                                                    cleanup_files=["scratch"])
                                   for x in
-                                  ["avrora", "fop", "h2", "jython", "lusearch", "lusearch-fix", "pmd", "sunflow",
-                                   "tomcat", "xalan"]
+                                  ["avrora", "batik", "eclipse", "fop",
+                                   "graphchi", "h2", "jme", "jython",
+                                   "kafka", "luindex", "lusearch", "pmd",
+                                   "spring", "sunflow", "tomcat", "tradebeans",
+                                   "tradesoap", "xalan", "zxing"]
                               ] + [
-                                  Benchmark.for_jar(BENCH_PATH / "renaissance.jar",
-                                                    [x, "--run-seconds", "$RUN_SECONDS"], f"renaissance {x}")
+                                  Benchmark.for_jar(RENAISSANCE_JAR_PATH,
+                                                    [x, "--run-seconds",
+                                                     "$RUN_SECONDS"],
+                                                    f"renaissance {x}")
                                   for x in
-                                  ['scrabble', 'page-rank', 'future-genetic', 'akka-uct', 'movie-lens', 'scala-doku',
+                                  ['scrabble', 'page-rank', 'future-genetic',
+                                   'akka-uct', 'movie-lens', 'scala-doku',
                                    'chi-square',
-                                   'fj-kmeans', 'rx-scrabble', 'finagle-http', 'reactors', 'dec-tree',
+                                   'fj-kmeans', 'rx-scrabble',
+                                   'neo4j-analytics', 'finagle-http',
+                                   'reactors', 'dec-tree',
                                    'scala-stm-bench7',
-                                   'naive-bayes', 'als', 'par-mnemonics', 'scala-kmeans',
-                                   'philosophers', 'log-regression', 'gauss-mix', 'mnemonics', 'dotty',
+                                   'naive-bayes', 'als', 'par-mnemonics',
+                                   'scala-kmeans',
+                                   'philosophers', 'log-regression',
+                                   'gauss-mix', 'mnemonics', 'dotty',
                                    'finagle-chirper']
                               ]
 
@@ -136,8 +175,10 @@ class JDKBuildType:
         if shutil.which("ccache") is not None:
             params.append("--enable-ccache")
         if platform.system() == "Darwin":
-            params.extend(["--disable-precompiled-headers", "--disable-warnings-as-errors"])
-        params.extend(["--with-debug-level=" + self.debug_level.value, "--with-jvm-variants=" + self.variant.value])
+            params.extend(["--disable-precompiled-headers",
+                           "--disable-warnings-as-errors"])
+        params.extend(["--with-debug-level=" + self.debug_level.value,
+                       "--with-jvm-variants=" + self.variant.value])
         return params
 
     def build_folder_ending(self) -> str:
@@ -149,7 +190,8 @@ class JDKBuildType:
     @staticmethod
     def parse(name: str) -> "JDKBuildType":
         variant, dbg = name.split("-")
-        return JDKBuildType(JDKVariant[variant.upper()], JDKDebugLevel[dbg.upper()])
+        return JDKBuildType(JDKVariant[variant.upper()],
+                            JDKDebugLevel[dbg.upper()])
 
 
 @dataclass(frozen=True)
@@ -164,14 +206,17 @@ class JDK:
         return len(list(self.base_path.glob(f"build/*{bt}"))) > 0
 
     def _configure(self, bt: JDKBuildType):
-        subprocess.check_call(["bash", "configure", *bt.build_params()], cwd=self.base_path, stdout=subprocess.DEVNULL)
+        subprocess.check_call(["bash", "configure", *bt.build_params()],
+                              cwd=self.base_path, stdout=subprocess.DEVNULL)
 
     def _build_folder(self, bt: JDKBuildType) -> Path:
         return Path(list(self.base_path.glob(f"build/*{bt}"))[0])
 
     def _make(self, bt: JDKBuildType):
-        subprocess.check_call(["make", f"CONF={self._build_folder(bt).name}", "images"], cwd=self.base_path,
-                              stdout=subprocess.DEVNULL)
+        subprocess.check_call(
+            ["make", f"CONF={self._build_folder(bt).name}", "images"],
+            cwd=self.base_path,
+            stdout=subprocess.DEVNULL)
 
     def build(self, bt: JDKBuildType):
         self._configure(bt)
@@ -194,9 +239,6 @@ class JDKBuild:
     def __str__(self):
         raise NotImplementedError()
 
-    def supports_asgst(self) -> bool:
-        raise NotImplementedError()
-
     def java_path(self) -> Path:
         return self.bin_path() / "java"
 
@@ -212,9 +254,6 @@ class IncludedJDKBuild(JDKBuild):
     def bin_path(self) -> Path:
         return self.jdk.build_folder(self.type) / "images" / "jdk" / "bin"
 
-    def supports_asgst(self) -> bool:
-        return "asgst" in self.jdk.name
-
 
 @dataclass(frozen=True)
 class CustomJDKBuild(JDKBuild):
@@ -226,9 +265,6 @@ class CustomJDKBuild(JDKBuild):
 
     def bin_path(self) -> Path:
         return self.path / "bin"
-
-    def supports_asgst(self) -> bool:
-        return True
 
 
 # available JDKS
@@ -245,7 +281,8 @@ def parse_jdk_build_name(name: str) -> Tuple[JDK, JDKBuildType]:
 
 
 def available_jdk_build_names(pattern: str) -> List[str]:
-    return [name for jdk in JDKS for variant in JDKVariant for dbg in JDKDebugLevel
+    return [name for jdk in JDKS for variant in JDKVariant for dbg in
+            JDKDebugLevel
             if match(pattern, (name := f"{jdk}-{variant.value}-{dbg.value}"))]
 
 
@@ -275,7 +312,8 @@ def get_jdk_builds(pattern: str) -> List[JDKBuild]:
         if "/" in pat:
             ret.append(get_jdk_build(pat))
         else:
-            ret.extend(get_jdk_build(name) for name in available_jdk_build_names(pat))
+            ret.extend(
+                get_jdk_build(name) for name in available_jdk_build_names(pat))
     return ret
 
 
@@ -381,13 +419,15 @@ class IteratedResults:
 
     def __post_init__(self):
         if self.results is None:
-            self.results = {jdk: {benchmark: IteratedResult([]) for benchmark in self.benchmarks} for jdk in self.jdks}
+            self.results = {jdk: {benchmark: IteratedResult([]) for benchmark in
+                                  self.benchmarks} for jdk in self.jdks}
 
     def add(self, jdk: JDKBuild, benchmark: Benchmark, result: Result):
         self.results[jdk][benchmark].results.append(result)
 
     def combined_jdk_results(self) -> List[IteratedResult]:
-        return [IteratedResult(list(x for benchmark in self.benchmarks for x in self.results[jdk][benchmark].results))
+        return [IteratedResult(list(x for benchmark in self.benchmarks for x in
+                                    self.results[jdk][benchmark].results))
                 for jdk in self.jdks]
 
     def __str__(self) -> str:
@@ -403,16 +443,21 @@ class IteratedResults:
             return f"{len(iresult)} * {iresult.error_rate():.3f}"
 
         lines: List[str] = []
-        max_benchmark_width = max(len(benchmark.name) for benchmark in self.benchmarks)
+        max_benchmark_width = max(
+            len(benchmark.name) for benchmark in self.benchmarks)
 
         def add_line(header: str, parts: List[Any]):
             lines.append(", ".join([pad_right(header, max_benchmark_width),
-                                    *(pad_left(str(p), len(str(jdk))) for jdk, p in zip(self.jdks, parts))]))
+                                    *(pad_left(str(p), len(str(jdk))) for jdk, p
+                                      in zip(self.jdks, parts))]))
 
         add_line("", self.jdks)
-        add_line("All", [format_iresult(ji) for ji in self.combined_jdk_results()])
+        add_line("All",
+                 [format_iresult(ji) for ji in self.combined_jdk_results()])
         for benchmark in self.benchmarks:
-            add_line(benchmark.name, [format_iresult(self.results[jdk][benchmark]) for jdk in self.jdks])
+            add_line(benchmark.name,
+                     [format_iresult(self.results[jdk][benchmark]) for jdk in
+                      self.jdks])
 
         return f"Profiler {self.profiler.name} tests for {int(time.time() - self.start)}s\n" \
                f"with config {self.config}\n\n" + "\n".join(lines)
@@ -421,7 +466,8 @@ class IteratedResults:
         path.write_text(str(self) + "\n")
 
 
-def Profiler_run(self: "Profiler", config: ProfilerConfig, jdk: JDKBuild, benchmark: Benchmark,
+def Profiler_run(self: "Profiler", config: ProfilerConfig, jdk: JDKBuild,
+                 benchmark: Benchmark,
                  result_base_folder: Path):
     return jdk, benchmark, self.run(config, jdk, benchmark, result_base_folder)
 
@@ -435,11 +481,13 @@ class Profiler:
     def __init__(self, name: str):
         self.name = name
 
-    def run_all_iterated(self, config: ProfilerConfig, jdks: List[JDKBuild], benchmarks: List[Benchmark],
+    def run_all_iterated(self, config: ProfilerConfig, jdks: List[JDKBuild],
+                         benchmarks: List[Benchmark],
                          result_base_folder: Path, max_iterations: int):
         os.makedirs(result_base_folder, exist_ok=True)
         results_file = result_base_folder / "results.csv"
-        results: IteratedResults = IteratedResults(self, config, jdks, benchmarks)
+        results: IteratedResults = IteratedResults(self, config, jdks,
+                                                   benchmarks)
         try:
             def handler(jdk, benchmark, result):
                 results.add(jdk, benchmark, result)
@@ -447,7 +495,8 @@ class Profiler:
                     print(results)
                     results.write(results_file)
 
-            self.run_all(config, jdks, benchmarks, result_base_folder, max_iterations, handler)
+            self.run_all(config, jdks, benchmarks, result_base_folder,
+                         max_iterations, handler)
 
         finally:
             print()
@@ -455,21 +504,32 @@ class Profiler:
             print("\n")
             results.write(results_file)
 
-    def run_all(self, config: ProfilerConfig, jdks: List[JDKBuild], benchmarks: List[Benchmark],
+    def run_all(self, config: ProfilerConfig, jdks: List[JDKBuild],
+                benchmarks: List[Benchmark],
                 result_base_folder: Path, max_count: int,
                 handler: Callable[[JDKBuild, Benchmark, Result], None]):
         if config.parallelism == 1:
             for i in range(max_count):
                 for jdk in jdks:
                     for benchmark in benchmarks:
-                        handler(jdk, benchmark, self.run(config, jdk, benchmark, result_base_folder))
+                        handler(jdk, benchmark, self.run(config, jdk, benchmark,
+                                                         result_base_folder))
         else:
             with multiprocessing.Pool(processes=config.parallelism) as pool:
                 for jdk, benchmark, result in pool.imap_unordered(Profiler_run2,
-                                                                  [(self, config, jdk, benchmark, result_base_folder)
-                                                                   for i in range(max_count)
-                                                                   for jdk in jdks
-                                                                   for benchmark in benchmarks],
+                                                                  [(
+                                                                   self, config,
+                                                                   jdk,
+                                                                   benchmark,
+                                                                   result_base_folder)
+                                                                   for i in
+                                                                   range(
+                                                                       max_count)
+                                                                   for jdk in
+                                                                   jdks
+                                                                   for benchmark
+                                                                   in
+                                                                   benchmarks],
                                                                   chunksize=1):
                     handler(jdk, benchmark, result)
 
@@ -477,22 +537,28 @@ class Profiler:
             result_base_folder: Path) -> Result:
         base_folder = result_base_folder / str(jdk) / benchmark.name
         os.makedirs(base_folder, exist_ok=True)
-        count = len(list(base_folder.iterdir())) if config.parallelism == 1 else time.time_ns()
+        count = len(list(
+            base_folder.iterdir())) if config.parallelism == 1 else time.time_ns()
         folder = base_folder / str(count)
         os.makedirs(folder, exist_ok=True)
         res = self._run(config, jdk.java_path(),
-                        benchmark.java_arguments(int(config.program_timeout)), folder, benchmark)
+                        benchmark.java_arguments(int(config.program_timeout)),
+                        folder, benchmark)
         return res
 
     def _run(self, config: ProfilerConfig,
-             java_binary: Path, bench_args: List[str], folder: Path, benchmark: Benchmark) -> Result:
+             java_binary: Path, bench_args: List[str], folder: Path,
+             benchmark: Benchmark) -> Result:
         env = self._env(java_binary.parent)
-        cmd = [java_binary, *self._java_arguments(config), f"-XX:ErrorFile=hs_err.log",
-               "-XX:+UnlockDiagnosticVMOptions", "-XX:+DebugNonSafepoints", *bench_args]
+        cmd = [java_binary, *self._java_arguments(config),
+               f"-XX:ErrorFile=hs_err.log",
+               "-XX:+UnlockDiagnosticVMOptions", "-XX:+DebugNonSafepoints",
+               *bench_args]
         try:
             print(" ".join(str(c).replace(str(BASE_PATH), ".") for c in cmd))
             try:
-                out = subprocess.check_output(cmd, env=env, cwd=folder, stderr=subprocess.PIPE,
+                out = subprocess.check_output(cmd, env=env, cwd=folder,
+                                              stderr=subprocess.PIPE,
                                               timeout=config.timeout).decode()
             except subprocess.TimeoutExpired as tex:
                 print(tex)
@@ -522,11 +588,8 @@ class Profiler:
     def _java_arguments(self, config: ProfilerConfig) -> List[str]:
         raise NotImplementedError()
 
-    def uses_asgst(self) -> bool:
-        return False
-
     def compatible(self, jdk: JDKBuild) -> bool:
-        return jdk.supports_asgst() or not self.uses_asgst()
+        return True
 
     @staticmethod
     def _env(jdk_folder: Path) -> Dict[str, str]:
@@ -544,21 +607,42 @@ class Profiler:
 
 class AsyncProfiler(Profiler):
 
-    def __init__(self, name: str, base_path: Path, asgst: bool):
+    def __init__(self, name: str, base_path: Path):
         super(AsyncProfiler, self).__init__(name)
-        self.asgst = asgst
         self.base_path = base_path
+
+    def build(self):
+        subprocess.check_call(["make", "clean"], cwd=self.base_path,
+                              stdout=subprocess.DEVNULL)
+        subprocess.check_call(["make", "JAVA_TARGET=8"], cwd=self.base_path,
+                              stdout=subprocess.DEVNULL,
+                              stderr=subprocess.DEVNULL)
+
+    def _find_lib(self) -> Path:
+        return next(self.base_path.glob("build/**/libasyncProfiler.*"))
 
     def _java_arguments(self, config: ProfilerConfig) -> List[str]:
         return [
-            f"-agentpath:{self.base_path}/build/libasyncProfiler.so=start,flat=10000,interval={config.interval()}us,"
+            f"-agentpath:{self._find_lib()}=start,flat=10000,interval={config.interval()}us,"
             f"traces=1,event=cpu"]
 
-    def uses_asgst(self) -> bool:
-        return self.asgst
+
+class AsyncProfilerNew(AsyncProfiler):
+
+    def __init__(self, name: str, base_path: Path):
+        super().__init__(name, base_path)
+
+
+class AsyncProfilerOld(AsyncProfiler):
+    """ before 2.10 """
+
+    def __init__(self, name: str, base_path: Path):
+        super().__init__(name, base_path)
 
     def build(self):
-        subprocess.check_call(["make"], cwd=self.base_path, stdout=subprocess.DEVNULL)
+        subprocess.check_call(["git", "checkout", "-f", "v2.9"],
+                              cwd=self.base_path, stdout=subprocess.DEVNULL)
+        super().build()
 
 
 class JFR(Profiler):
@@ -570,18 +654,19 @@ class JFR(Profiler):
         return [f"-XX:StartFlightRecording=filename=flight.jfr,"
                 f"jdk.ExecutionSample#period={max(1, round(config.interval() / 1000))}ms"]
 
-    def uses_asgst(self) -> bool:
-        return False
-
     def cleanup_and_check(self, folder: Path):
-        out = subprocess.check_output(["jfr", "print", "--events", "jdk.ExecutionSample", "flight.jfr"], cwd=folder)
+        out = subprocess.check_output(
+            ["jfr", "print", "--events", "jdk.ExecutionSample", "flight.jfr"],
+            cwd=folder)
         assert "jdk.ExecutionSample" in out.strip().decode()
         os.remove(folder / "flight.jfr")
 
 
 PROFILERS = [JFR(),
-             AsyncProfiler("asgst", BASE_PATH / "profilers" / "asgst-async-profiler", asgst=True),
-             AsyncProfiler("asgct", BASE_PATH / "profilers" / "async-profiler", asgst=False)]
+             AsyncProfilerNew("asgct",
+                              BASE_PATH / "profilers" / "async-profiler"),
+             AsyncProfilerOld("asgct-2.9",
+                              BASE_PATH / "profilers" / "async-profiler-2.9")]
 
 
 def get_profilers(pattern: str) -> List[Profiler]:
@@ -602,19 +687,23 @@ def profile(config: ProfilerConfig, profilers: List[Profiler],
             profiler.build()
             comp_jdks = [jdk for jdk in jdks if profiler.compatible(jdk)]
             if not len(comp_jdks):
-                warnings.warn(f"no jdks given that are compatible to the profiler {profiler}")
+                warnings.warn(
+                    f"no jdks given that are compatible to the profiler {profiler}")
             profiler.run_all_iterated(config,
                                       comp_jdks,
-                                      benchmarks, result_base_folder / profiler.name,
+                                      benchmarks,
+                                      result_base_folder / profiler.name,
                                       max_iterations)
     except KeyboardInterrupt as tex:
         print("aborted", file=sys.stderr)
 
 
 def cli():
-    parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser = argparse.ArgumentParser(
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.set_defaults(func=lambda args: parser.print_help())
-    subparsers = parser.add_subparsers(title="subcommands", help="additional help")
+    subparsers = parser.add_subparsers(title="subcommands",
+                                       help="additional help")
 
     def handle_build(args):
         print("Build jdks")
@@ -631,8 +720,9 @@ def cli():
             print(x)
 
     av_jdks_parser = subparsers.add_parser("jdks", help="available JDK builds")
-    av_jdks_parser.add_argument("pattern", help="glob style pattern (supports commas), "
-                                                "e.g. 'openjdk*' matches all openjdk builds",
+    av_jdks_parser.add_argument("pattern",
+                                help="glob style pattern (supports commas), "
+                                     "e.g. 'openjdk*' matches all openjdk builds",
                                 nargs="?")
     av_jdks_parser.set_defaults(pattern="*", func=handle_av_jdks)
 
@@ -640,38 +730,55 @@ def cli():
         for x in get_benchmarks(args.pattern):
             print(x.name)
 
-    av_benchmarks_parser = subparsers.add_parser("benchmarks", help="available benchmarks")
-    av_benchmarks_parser.add_argument("pattern", help="glob style pattern (supports commas), "
-                                                      "e.g. 'dacapo*' matches all dacapo benchmarks",
+    av_benchmarks_parser = subparsers.add_parser("benchmarks",
+                                                 help="available benchmarks")
+    av_benchmarks_parser.add_argument("pattern",
+                                      help="glob style pattern (supports commas), "
+                                           "e.g. 'dacapo*' matches all dacapo benchmarks",
                                       nargs="?")
     av_benchmarks_parser.set_defaults(pattern="*", func=handle_av_benchmarks)
 
     def handle_profile(args):
-        profile(ProfilerConfig(args.interval, args.timeout, args.program_timeout, args.parallelism),
-                get_profilers(args.profiler_pattern),
-                get_jdk_builds(args.jdk_pattern),
-                get_benchmarks(args.benchmarks),
-                BASE_PATH / "results" / str(int(time.time())),
-                args.iterations)
+        profile(
+            ProfilerConfig(args.interval, args.timeout, args.program_timeout,
+                           args.parallelism),
+            get_profilers(args.profiler_pattern),
+            get_jdk_builds(args.jdk_pattern),
+            get_benchmarks(args.benchmarks),
+            BASE_PATH / "results" / str(int(time.time())),
+            args.iterations)
 
-    profile_parser = subparsers.add_parser("profile", help="profile benchmarks with jdks and profilers")
+    profile_parser = subparsers.add_parser("profile",
+                                           help="profile benchmarks with jdks and profilers")
     profile_parser.add_argument("profiler_pattern",
                                 help=f"profilers: {', '.join(profiler.name for profiler in PROFILERS)}")
-    profile_parser.add_argument("jdk_pattern", help="glob style patterns for jdks, supports commas")
-    profile_parser.add_argument("--benchmarks", help="glob style patterns for benchmarks, supports commas")
-    profile_parser.add_argument("--interval", "-i", help="Interval for obtaining call traces, might be an interval, "
-                                                         "e.g. '0.1ms,0.2ms'")
-    profile_parser.add_argument("--timeout", "-t", help="Timeout for benchmarked programs", type=float)
-    profile_parser.add_argument("--program_timeout", help="Timeout that the benchmarked program is "
-                                                          "passed if supported", type=float)
-    profile_parser.add_argument("--parallelism", "-p", help="> 1 for parallel profiling, parallel for every profiler",
+    profile_parser.add_argument("jdk_pattern",
+                                help="glob style patterns for jdks, supports commas")
+    profile_parser.add_argument("--benchmarks",
+                                help="glob style patterns for benchmarks, supports commas")
+    profile_parser.add_argument("--interval", "-i",
+                                help="Interval for obtaining call traces, might be an interval, "
+                                     "e.g. '0.1ms,0.2ms'")
+    profile_parser.add_argument("--timeout", "-t",
+                                help="Timeout for benchmarked programs",
+                                type=float)
+    profile_parser.add_argument("--program_timeout",
+                                help="Timeout that the benchmarked program is "
+                                     "passed if supported", type=float)
+    profile_parser.add_argument("--parallelism", "-p",
+                                help="> 1 for parallel profiling, parallel for every profiler",
                                 type=int)
-    profile_parser.add_argument("--iterations", "-c", help="number of iterations per profiler", type=int)
-    profile_parser.set_defaults(profiler_pattern="*", jdk_pattern="*", benchmarks="*",
-                                interval="100us", timeout=200, program_timeout=30, parallelism=1,
+    profile_parser.add_argument("--iterations", "-c",
+                                help="number of iterations per profiler",
+                                type=int)
+    profile_parser.set_defaults(profiler_pattern="*", jdk_pattern="*",
+                                benchmarks="*",
+                                interval="10us", timeout=200,
+                                program_timeout=30, parallelism=1,
                                 iterations=10, func=handle_profile)
 
-    args = parser.parse_args(sys.argv[1:] if sys.argv[0].endswith(".py") else sys.argv)
+    args = parser.parse_args(
+        sys.argv[1:] if sys.argv[0].endswith(".py") else sys.argv)
     args.func(args)
 
 
