@@ -194,6 +194,9 @@ class JDKBuildType:
         return JDKBuildType(JDKVariant[variant.upper()],
                             JDKDebugLevel[dbg.upper()])
 
+    def is_debug_build(self) -> bool:
+        return self.debug_level != JDKDebugLevel.RELEASE
+
 
 @dataclass(frozen=True)
 class JDK:
@@ -247,6 +250,9 @@ class JDKBuild:
     def has_patched_jfr(self) -> bool:
         return False
 
+    def is_debug_build(self) -> bool:
+        raise NotImplementedError()
+
 
 @dataclass(frozen=True)
 class IncludedJDKBuild(JDKBuild):
@@ -262,6 +268,9 @@ class IncludedJDKBuild(JDKBuild):
     def has_patched_jfr(self) -> bool:
         return self.jdk.has_patched_jfr
 
+    def is_debug_build(self) -> bool:
+        return self.type.is_debug_build()
+
 
 @dataclass(frozen=True)
 class CustomJDKBuild(JDKBuild):
@@ -273,6 +282,9 @@ class CustomJDKBuild(JDKBuild):
 
     def bin_path(self) -> Path:
         return self.path / "bin"
+
+    def is_debug_build(self) -> bool:
+        return "-fastdebug" in str(self.path) or "-slowdebug" in str(self.path)
 
 
 # available JDKS
@@ -676,8 +688,9 @@ class JFR(Profiler):
                 warnings.warn(
                     "JFR does not support intervals < 1ms, using 1ms instead")
             interval = f"{max(1, round(config.interval() / 1000))}ms"
+        sampleprotection = "false" if jdk.is_debug_build() else "true"
         return [f"-XX:StartFlightRecording=filename=flight.jfr,"
-                f"jdk.ExecutionSample#period={interval}"]
+                f"jdk.ExecutionSample#period={interval},sampleprotection={sampleprotection}"]
 
     def cleanup_and_check(self, folder: Path):
         out = subprocess.check_output(
